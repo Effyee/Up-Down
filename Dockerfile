@@ -9,3 +9,6 @@ COPY ${JAR_FILE} app.jar
 
 # 컨테이너가 실행될 때 JAR 파일을 실행하도록 설정
 ENTRYPOINT ["java","-jar","/app.jar"]
+
+# 컨테이너 8080 포트 노출
+EXPOSE 8080
