@@ -12,3 +12,10 @@ ENTRYPOINT ["java","-jar","/app.jar"]
 
 # 컨테이너 8080 포트 노출
 EXPOSE 8080
+
+COPY scripts/ scripts/
+
+RUN apt-get update && apt-get install -y python3 python3-pip \
+    && pip3 install --no-cache-dir yfinance pandas multitasking==0.0.9 \
+    && rm -rf /var/lib/apt/lists/*
+
