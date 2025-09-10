@@ -21,9 +21,9 @@ public class Stock {
     private Long id;
 
     @Column(unique = true, nullable = false)
-    private String ticker; // 종목 코드 (예: "AAPL")
+    private String ticker; // 종목 코드
 
-    private String name; // 종목명 (예: "Apple Inc.")
+    private String name; // 종목명
 
     private Double currentPrice; // 현재가
 
@@ -35,7 +35,7 @@ public class Stock {
 
     private Long volume; // 거래량
 
-    @UpdateTimestamp // 데이터가 업데이트될 때마다 자동으로 시간이 기록됩니다.
+    @UpdateTimestamp // 데이터가 업데이트될 때마다 자동으로 시간이 기록
     private LocalDateTime updatedAt;
 
     @Builder
@@ -49,7 +49,7 @@ public class Stock {
         this.volume = volume;
     }
 
-    // 주가 정보를 업데이트하는 비즈니스 메소드
+    // 주가 정보를 업데이트 메소드
     public void updatePrice(StockPriceDto priceDto) {
         this.currentPrice = priceDto.getClosePrice();
         this.openPrice = priceDto.getOpenPrice();
@@ -57,4 +57,11 @@ public class Stock {
         this.lowPrice = priceDto.getLowPrice();
         this.volume = priceDto.getVolume();
     }
+
+    public void updateCurrentPrice(Double currentPrice) {
+        this.currentPrice = currentPrice;
+    }
+
+
+
 }
