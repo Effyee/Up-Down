@@ -1,9 +1,26 @@
 version: '3.8'
 
 services:
+  # Python 실시간 프로듀서 서비스
+  python-app:
+    build:
+      context: .
+      dockerfile: producer.Dockerfile
+    container_name: upanddown-python
+    ports:
+      - "5000:5000"
+    environment:
+      - PYTHONUNBUFFERED=1
+      - RABBITMQ_HOST=rabbitmq
+    depends_on:
+      - redis
+      - rabbitmq
+
   # Spring Boot 애플리케이션 서비스
-  app:
-    build: .
+  java-app:
+    build:
+      context: .
+      dockerfile: Dockerfile
     container_name: upanddown-app
     ports:
       - "8081:8080"
@@ -12,15 +29,14 @@ services:
       - SPRING_DATASOURCE_USERNAME=${DB_USERNAME}
       - SPRING_DATASOURCE_PASSWORD=${DB_PASSWORD}
       - SPRING_DATA_REDIS_HOST=redis
-      # 모든 웹 엔드포인트 노출
+      - SPRING_RABBITMQ_HOST=rabbitmq
       - management.endpoints.web.exposure.include=*
-      # Prometheus 엔드포인트 명시적으로 활성화
       - management.endpoint.prometheus.enabled=true
-      # Actuator 메트릭 상세 설정
       - management.metrics.distribution.percentiles-histogram.http.server.requests=true
       - management.metrics.tags.application=upanddown
     depends_on:
       - redis
+      - rabbitmq
 
   # Redis 데이터베이스 서비스
   redis:
@@ -28,6 +44,17 @@ services:
     container_name: upanddown-redis
     ports:
       - "6379:6379"
+
+  # RabbitMQ 메시지 브로커 서비스
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    container_name: upanddown-rabbitmq
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    environment:
+      - RABBITMQ_DEFAULT_USER=guest
+      - RABBITMQ_DEFAULT_PASS=guest
 
   # Prometheus 모니터링 서비스
   prometheus:
@@ -40,7 +67,7 @@ services:
     command:
       - '--config.file=/etc/prometheus/prometheus.yml'
     depends_on:
-      - app
+      - java-app
 
   # Grafana 시각화 서비스
   grafana:

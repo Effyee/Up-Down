@@ -1,21 +1,29 @@
-# 사용할 기본 이미지 (Java 17 JRE)
-FROM eclipse-temurin:17-jre-focal
+FROM amazoncorretto:17-alpine-jdk AS builder
 
-# 애플리케이션 JAR 파일 경로 지정
-ARG JAR_FILE=build/libs/*.jar
+WORKDIR /workspace/app
 
-# JAR 파일을 컨테이너에 복사
-COPY ${JAR_FILE} app.jar
+# Gradle 의존성 캐싱을 위해 설정 파일 먼저 복사
+COPY build.gradle gradlew ./
+COPY gradle ./gradle
+RUN ./gradlew dependencies
 
-# 컨테이너가 실행될 때 JAR 파일을 실행하도록 설정
-ENTRYPOINT ["java","-jar","/app.jar"]
+# 소스코드 전체 복사
+COPY . .
 
-# 컨테이너 8080 포트 노출
+# Gradlew에 실행 권한 부여
+RUN chmod +x ./gradlew
+# 프로젝트 빌드
+RUN ./gradlew build -x test
+
+FROM amazoncorretto:17-alpine
+
+ARG JAR_FILE=/workspace/app/build/libs/*.jar
+
+# 빌드 단계에서 생성된 .jar 파일을 최종 이미지로 복사
+COPY --from=builder ${JAR_FILE} app.jar
+
+# 8080 포트를 외부에 노출
 EXPOSE 8080
 
-COPY scripts/ scripts/
-
-RUN apt-get update && apt-get install -y python3 python3-pip \
-    && pip3 install --no-cache-dir yfinance pandas multitasking==0.0.9 \
-    && rm -rf /var/lib/apt/lists/*
-
+# 컨테이너 시작 시 애플리케이션 실행
+ENTRYPOINT ["java","-jar","/app.jar"]

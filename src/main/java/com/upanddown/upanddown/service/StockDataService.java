@@ -18,18 +18,18 @@ import java.util.List;
 import java.util.stream.Collectors;
 
 @Service
-@RequiredArgsConstructor // final 필드를 위한 생성자를 자동으로 만들어줍니다 (의존성 주입).
+@RequiredArgsConstructor // final 필드를 위한 생성자
 public class StockDataService {
 
     private static final Logger log = LoggerFactory.getLogger(StockDataService.class);
     private final ObjectMapper objectMapper = new ObjectMapper();
-    private final StockRepository stockRepository; // DB와 대화할 Repository를 주입받습니다.
+    private final StockRepository stockRepository; // DB와 대화할 Repository를 주입
 
-    @Transactional // 이 메소드 전체를 하나의 트랜잭션으로 묶어 데이터 정합성을 보장합니다.
+    @Transactional // 이 메소드 전체를 하나의 트랜잭션으로 묶어 데이터 정합성을 보장
     public void updateStockPrices() {
         log.info("updateStockPrices() called - Starting stock data fetch process...");
 
-        // TODO: 나중에는 DB의 stocks 테이블에서 모든 티커를 조회하도록 수정해야 합니다.
+        // TODO: 나중에는 DB의 stocks 테이블에서 모든 티커를 조회하도록 수정
         List<String> tickers = List.of("005930.KS", "AAPL", "MSFT", "GOOGL");
 
         try {
@@ -96,5 +96,31 @@ public class StockDataService {
             log.error("An error occurred during stock price update process", e);
         }
     }
-}
 
+    /**
+     * RabbitMQ에서 수신한 주가 리스트를 DB에 반영하는 메서드
+     */
+    @Transactional
+    public void updateStockPricesFromQueue(List<StockPriceDto> stockPrices) {
+        for (StockPriceDto priceDto : stockPrices) {
+            stockRepository.findByTicker(priceDto.getTicker())
+                    .ifPresentOrElse(
+                            stock -> {
+                                stock.updatePrice(priceDto);
+                            },
+                            () -> {
+                                Stock newStock = Stock.builder()
+                                        .ticker(priceDto.getTicker())
+                                        .name(priceDto.getTicker())
+                                        .currentPrice(priceDto.getClosePrice())
+                                        .openPrice(priceDto.getOpenPrice())
+                                        .highPrice(priceDto.getHighPrice())
+                                        .lowPrice(priceDto.getLowPrice())
+                                        .volume(priceDto.getVolume())
+                                        .build();
+                                stockRepository.save(newStock);
+                            }
+                    );
+        }
+    }
+}
