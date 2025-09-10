@@ -44,4 +44,15 @@ public class OrderController {
             return ResponseEntity.badRequest().body("주문 실패: " + e.getMessage());
         }
     }
+
+    /**
+     * 판매 주문 등록 API
+     * @param request 판매 주문 정보
+     * @return 등록된 주문 ID
+     */
+    @PostMapping("/orders/sell")
+    public ResponseEntity<Long> createSellOrder(@RequestBody OrderRequestDto request) {
+        Long orderId = orderService.createSellOrder(request);
+        return ResponseEntity.ok(orderId);
+    }
 }
