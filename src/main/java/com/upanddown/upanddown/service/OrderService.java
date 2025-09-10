@@ -120,6 +120,24 @@ public class OrderService {
         throw e;
     }
 
+    /**
+     * 판매 주문 등록 로직
+     * @param request 판매 주문 정보
+     * @return 등록된 주문 ID
+     */
+    @Transactional
+    public Long createSellOrder(OrderRequestDto request) {
+        Order sellOrder = Order.builder()
+                .userId(request.getUserId())
+                .ticker(request.getTicker())
+                .orderType("SELL")
+                .price(request.getPrice())
+                .quantity(request.getRequestedQuantity())
+                .build();
+        Order savedOrder = orderRepository.save(sellOrder);
+        return savedOrder.getId();
+    }
+
     private void validateOrder(Order sellOrder, OrderRequestDto request) {
         if (!sellOrder.getTicker().equals("005930")) {
             throw new IllegalArgumentException("올바른 종목 코드가 아닙니다.");
