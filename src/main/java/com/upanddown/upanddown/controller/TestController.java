@@ -2,8 +2,10 @@ package com.upanddown.upanddown.controller;
 
 import com.upanddown.upanddown.service.StockDataService;
 import lombok.RequiredArgsConstructor;
+import com.upanddown.upanddown.service.RankingService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -16,6 +18,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RequiredArgsConstructor
 public class TestController {
 
+    private final RankingService rankingService;
     private final StockDataService stockDataService;
 
     /**
@@ -31,6 +34,17 @@ public class TestController {
         new Thread(() -> stockDataService.updateStockPrices()).start();
 
         return ResponseEntity.ok("Stock price update process has been triggered successfully in the background.");
+    }
+    @PostMapping("/update-rankings")
+    public ResponseEntity<String> forceUpdateRankings() {
+        System.out.println("수동 랭킹 업데이트 시작...");
+        long startTime = System.currentTimeMillis();
+
+        rankingService.updateUserRankings();
+
+        long endTime = System.currentTimeMillis();
+        System.out.println("수동 랭킹 업데이트 완료. 소요 시간: " + (endTime - startTime) + "ms");
+        return ResponseEntity.ok("Ranking update triggered and completed.");
     }
 }
 
