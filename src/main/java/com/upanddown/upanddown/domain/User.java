@@ -6,6 +6,9 @@ import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
+import java.util.ArrayList;
+import java.util.List;
+
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 @Entity
@@ -20,10 +23,16 @@ public class User {
     private String username;
 
     @Column(nullable = false)
-    private String password; // 실제 앱에서는 반드시 인코딩해야 합니다.
+    private String password;
 
     @Column(unique = true, nullable = false)
     private String email;
+
+    @OneToOne(mappedBy = "user", fetch = FetchType.LAZY)
+    private UserAccount userAccount;
+
+    @OneToMany(mappedBy = "user", fetch = FetchType.LAZY)
+    private List<UserPortfolio> portfolios = new ArrayList<>();
 
     @Builder
     public User(String username, String password, String email) {
@@ -32,3 +41,4 @@ public class User {
         this.email = email;
     }
 }
+

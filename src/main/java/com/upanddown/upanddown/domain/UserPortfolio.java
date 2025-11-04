@@ -12,6 +12,10 @@ import lombok.*;
 public class UserPortfolio {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "user_id")
+    private User user;
+
     private Long id;
 
     private Long userId; // 사용자 식별자
