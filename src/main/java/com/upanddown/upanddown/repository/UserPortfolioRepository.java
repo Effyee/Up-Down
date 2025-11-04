@@ -7,6 +7,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import jakarta.persistence.LockModeType;
 
+import java.util.List;
 import java.util.Optional;
 
 public interface UserPortfolioRepository extends JpaRepository<UserPortfolio, Long> {
@@ -19,4 +20,6 @@ public interface UserPortfolioRepository extends JpaRepository<UserPortfolio, Lo
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select p from UserPortfolio p where p.userId = :userId and p.ticker = :ticker")
     Optional<UserPortfolio> findByUserIdAndTickerWithPessimisticLock(@Param("userId") Long userId, @Param("ticker") String ticker);
+
+    List<UserPortfolio> findAllByUserId(Long id);
 }

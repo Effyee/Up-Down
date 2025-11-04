@@ -3,6 +3,10 @@ package com.upanddown.upanddown.controller;
 import com.upanddown.upanddown.service.StockDataService;
 import lombok.RequiredArgsConstructor;
 import com.upanddown.upanddown.service.RankingService;
+import org.springframework.batch.core.Job;
+import org.springframework.batch.core.JobParameters;
+import org.springframework.batch.core.JobParametersBuilder;
+import org.springframework.batch.core.launch.JobLauncher;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -45,6 +49,29 @@ public class TestController {
         long endTime = System.currentTimeMillis();
         System.out.println("수동 랭킹 업데이트 완료. 소요 시간: " + (endTime - startTime) + "ms");
         return ResponseEntity.ok("Ranking update triggered and completed.");
+    }
+
+    private final JobLauncher jobLauncher;
+    private final Job rankingJob;
+    /**
+     * 랭킹 집계 배치 Job을 수동으로 실행합니다.
+     */
+    @PostMapping("/run-ranking-job")
+    public ResponseEntity<String> runRankingJob() {
+        try {
+            // ✅ [핵심 수정] Job을 실행할 때마다 현재 시간을 파라미터로 추가합니다.
+            // 이렇게 하면 매번 새로운 JobInstance가 생성되어 Job이 항상 처음부터 실행됩니다.
+            JobParameters jobParameters = new JobParametersBuilder()
+                    .addString("run.id", String.valueOf(System.currentTimeMillis()))
+                    .toJobParameters();
+
+            jobLauncher.run(rankingJob, jobParameters);
+
+            return ResponseEntity.ok("랭킹 집계 배치 Job이 성공적으로 시작되었습니다.");
+
+        } catch (Exception e) {
+            return ResponseEntity.internalServerError().body("Job 실행 중 오류가 발생했습니다: " + e.getMessage());
+        }
     }
 }
 
