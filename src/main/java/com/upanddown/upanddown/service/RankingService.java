@@ -54,8 +54,7 @@ public class RankingService {
         // 2. 각 유저별로 수익률 계산
         for (User user : allUsers) {
             // 2-1. 현재 총 자산 계산
-            // [수정된 부분] userAccountsMap에서 직접 조회하고, 계좌가 없는 경우 잔액을 0으로 처리합니다.
-            // 이렇게 하면 존재하지 않는 생성자를 호출하는 오류를 피하고 코드가 더 명확해집니다.
+            //userAccountsMap에서 직접 조회하고, 계좌가 없는 경우 잔액을 0으로 처리
             UserAccount account = userAccountsMap.get(user.getId());
             BigDecimal balance = (account != null) ? account.getBalance() : BigDecimal.ZERO;
 
