@@ -17,16 +17,15 @@ import org.springframework.batch.core.Job;
 import org.springframework.batch.core.JobExecution;
 import org.springframework.batch.core.JobExecutionListener;
 import org.springframework.batch.core.Step;
+import org.springframework.batch.core.configuration.annotation.StepScope; // [추가]
 import org.springframework.batch.core.job.builder.JobBuilder;
 import org.springframework.batch.core.repository.JobRepository;
 import org.springframework.batch.core.step.builder.StepBuilder;
-import org.springframework.batch.core.step.tasklet.Tasklet;
 import org.springframework.batch.item.ItemProcessor;
 import org.springframework.batch.item.database.JpaItemWriter;
 import org.springframework.batch.item.database.JpaPagingItemReader;
 import org.springframework.batch.item.database.builder.JpaItemWriterBuilder;
 import org.springframework.batch.item.database.builder.JpaPagingItemReaderBuilder;
-import org.springframework.batch.repeat.RepeatStatus;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.lang.NonNull;
@@ -36,6 +35,7 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicInteger; // [추가]
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -46,68 +46,65 @@ public class RankingBatchConfiguration {
     private final JobRepository jobRepository;
     private final PlatformTransactionManager transactionManager;
     private final EntityManagerFactory entityManagerFactory;
-    private final UserAccountRepository userAccountRepository;
-    private final UserPortfolioRepository userPortfolioRepository;
-    private final RankingRepository rankingRepository;
+    private final UserAccountRepository userAccountRepository; // (Processor에서 제거되었지만, 혹시 모를 다른 용도를 위해 유지)
+    private final UserPortfolioRepository userPortfolioRepository; // (Processor에서 제거되었지만, 혹시 모를 다른 용도를 위해 유지)
+    private final RankingRepository rankingRepository; // (Tasklet에서 제거되었지만, Step 2에서 사용)
     private final StockRepository stockRepository;
 
     private static final int CHUNK_SIZE = 100;
     private static final BigDecimal INITIAL_CAPITAL = new BigDecimal("10000000");
 
+    // =========================================================================
+    // == Job 설정
+    // =========================================================================
+    // == Job 설정
+    // =========================================================================
     @Bean
-    public Job rankingJob(JobExecutionListener jobCompletionNotificationListener) { // [수정] JobExecutionListener를 파라미터로 주입받습니다.
+    public Job rankingJob(JobExecutionListener jobCompletionNotificationListener) {
         return new JobBuilder("rankingJob", jobRepository)
-                .listener(jobCompletionNotificationListener) // [수정] 주입받은 리스너를 사용합니다.
-                .start(calculateAssetsStep())
-                .next(applyRanksStep())
+                .listener(jobCompletionNotificationListener)
+                .start(calculateAssetsStep()) // Step 1: 자산 계산
+                .next(applyRanksStep())       // Step 2: 순위 부여
                 .build();
     }
 
-    // (이하 다른 Bean 설정들은 변경 없음)
+    // =========================================================================
+    // == Step 1: 자산 계산 (N+1 문제 해결)
+    // =========================================================================
     @Bean
     public Step calculateAssetsStep() {
         return new StepBuilder("calculateAssetsStep", jobRepository)
                 .<User, Ranking>chunk(CHUNK_SIZE, transactionManager)
                 .reader(userItemReader())
                 .processor(rankingItemProcessor())
-                .writer(rankingItemWriter())
-                .build();
-    }
-
-    @Bean
-    public Step applyRanksStep() {
-        return new StepBuilder("applyRanksStep", jobRepository)
-                .tasklet(applyRankTasklet(), transactionManager)
+                .writer(rankingItemWriter()) // Step 1용 Writer
                 .build();
     }
 
     @Bean
     public JpaPagingItemReader<User> userItemReader() {
-        // User를 조회할 때 userAccount와 portfolios를 미리가져옴
         String jpqlQuery = "SELECT DISTINCT u FROM User u " +
                 "JOIN FETCH u.userAccount ua " +
-                "LEFT JOIN FETCH u.portfolios p " + // User 1명당 Portfolio가 여러 개일 수 있으니 LEFT JOIN
+                "LEFT JOIN FETCH u.portfolios p " +
                 "ORDER BY u.id ASC";
 
         return new JpaPagingItemReaderBuilder<User>()
-                .name("userItemReader")
+                .name("userItemReader") // [정상] Reader는 상태 저장을 위해 name이 필수
                 .entityManagerFactory(entityManagerFactory)
                 .pageSize(CHUNK_SIZE)
-                .queryString(jpqlQuery) // 3개 테이블을 조인
+                .queryString(jpqlQuery)
                 .build();
     }
 
     @Bean
     public ItemProcessor<User, Ranking> rankingItemProcessor() {
+        // ... (Processor 코드는 이전과 동일) ...
         Map<String, BigDecimal> stockPrices = stockRepository.findAll().stream()
                 .collect(Collectors.toMap(Stock::getTicker, stock -> BigDecimal.valueOf(stock.getCurrentPrice())));
 
         return user -> {
-            //1. User에 연관된 UserAccount 바로 참조
             UserAccount userAccount = user.getUserAccount();
             BigDecimal balance = userAccount != null ? userAccount.getBalance() : BigDecimal.ZERO;
-
-            //2. User에 연관된 Portfolio 컬렉션 바로 참조
             List<UserPortfolio> portfolios = user.getPortfolios();
 
             BigDecimal stockAssets = portfolios.stream()
@@ -118,7 +115,6 @@ public class RankingBatchConfiguration {
                     .reduce(BigDecimal.ZERO, BigDecimal::add);
 
             BigDecimal totalAssets = balance.add(stockAssets);
-
             double profitRate = totalAssets.subtract(INITIAL_CAPITAL)
                     .divide(INITIAL_CAPITAL, 4, RoundingMode.HALF_UP)
                     .multiply(new BigDecimal("100"))
@@ -136,27 +132,62 @@ public class RankingBatchConfiguration {
     @Bean
     public JpaItemWriter<Ranking> rankingItemWriter() {
         return new JpaItemWriterBuilder<Ranking>()
+                // [★수정★] .name() 메서드 제거
                 .entityManagerFactory(entityManagerFactory)
                 .build();
     }
 
+
+    // =========================================================================
+    // == Step 2: 순위 부여 (OOM 문제 해결)
+    // =========================================================================
     @Bean
-    public Tasklet applyRankTasklet() {
-        return (contribution, chunkContext) -> {
-            log.info(">>>>> [Step 2] Ranking 순위 부여 Tasklet 시작");
-            List<Ranking> rankings = rankingRepository.findAllByOrderByTotalAssetsDesc();
-            int rank = 1;
-            for (Ranking ranking : rankings) {
-                ranking.setCurrentRank(rank++);
-            }
-            rankingRepository.saveAll(rankings);
-            log.info("<<<<< [Step 2] Ranking 순위 부여 Tasklet 종료");
-            return RepeatStatus.FINISHED;
+    public Step applyRanksStep() {
+        return new StepBuilder("applyRanksStep", jobRepository)
+                .<Ranking, Ranking>chunk(CHUNK_SIZE, transactionManager)
+                .reader(rankingItemReaderStep2())
+                .processor(rankingItemProcessorStep2())
+                .writer(rankingItemWriterStep2()) // Step 2용 Writer
+                .build();
+    }
+
+    @Bean
+    public JpaPagingItemReader<Ranking> rankingItemReaderStep2() {
+        String jpqlQuery = "SELECT r FROM Ranking r ORDER BY r.totalAssets DESC";
+
+        return new JpaPagingItemReaderBuilder<Ranking>()
+                .name("rankingItemReaderStep2") // [정상] Reader는 상태 저장을 위해 name이 필수
+                .entityManagerFactory(entityManagerFactory)
+                .pageSize(CHUNK_SIZE)
+                .queryString(jpqlQuery)
+                .build();
+    }
+
+    @Bean
+    @StepScope
+    public ItemProcessor<Ranking, Ranking> rankingItemProcessorStep2() {
+        AtomicInteger rankCounter = new AtomicInteger(1);
+
+        return ranking -> {
+            ranking.setCurrentRank(rankCounter.getAndIncrement());
+            return ranking;
         };
     }
 
     @Bean
+    public JpaItemWriter<Ranking> rankingItemWriterStep2() {
+        return new JpaItemWriterBuilder<Ranking>()
+                // [★수정★] .name() 메서드 제거
+                .entityManagerFactory(entityManagerFactory)
+                .build();
+    }
+
+    // =========================================================================
+    // == Job 리스너 (실행 시간 로깅)
+    // =========================================================================
+    @Bean
     public JobExecutionListener jobCompletionNotificationListener() {
+        // ... (리스너 코드는 이전과 동일) ...
         return new JobExecutionListener() {
             private long startTime;
 
@@ -190,4 +221,3 @@ public class RankingBatchConfiguration {
         };
     }
 }
-
