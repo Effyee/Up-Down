@@ -83,11 +83,17 @@ public class RankingBatchConfiguration {
 
     @Bean
     public JpaPagingItemReader<User> userItemReader() {
+        // User를 조회할 때 userAccount와 portfolios를 미리가져옴
+        String jpqlQuery = "SELECT DISTINCT u FROM User u " +
+                "JOIN FETCH u.userAccount ua " +
+                "LEFT JOIN FETCH u.portfolios p " + // User 1명당 Portfolio가 여러 개일 수 있으니 LEFT JOIN
+                "ORDER BY u.id ASC";
+
         return new JpaPagingItemReaderBuilder<User>()
                 .name("userItemReader")
                 .entityManagerFactory(entityManagerFactory)
                 .pageSize(CHUNK_SIZE)
-                .queryString("SELECT u FROM User u ORDER BY u.id ASC")
+                .queryString(jpqlQuery) // 3개 테이블을 조인
                 .build();
     }
 
