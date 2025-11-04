@@ -19,6 +19,10 @@ public class UserAccount {
     private Long userId; // 사용자 식별자
     private BigDecimal balance; // 예치금 (정확한 계산을 위해 BigDecimal 사용)
 
+    @OneToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "user_id")
+    private User user;
+
     @Version
     private Long version;
 }

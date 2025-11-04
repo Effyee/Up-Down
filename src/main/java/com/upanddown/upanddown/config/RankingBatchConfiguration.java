@@ -103,11 +103,13 @@ public class RankingBatchConfiguration {
                 .collect(Collectors.toMap(Stock::getTicker, stock -> BigDecimal.valueOf(stock.getCurrentPrice())));
 
         return user -> {
-            BigDecimal balance = userAccountRepository.findByUserId(user.getId())
-                    .map(UserAccount::getBalance)
-                    .orElse(BigDecimal.ZERO);
+            //1. User에 연관된 UserAccount 바로 참조
+            UserAccount userAccount = user.getUserAccount();
+            BigDecimal balance = userAccount != null ? userAccount.getBalance() : BigDecimal.ZERO;
 
-            List<UserPortfolio> portfolios = userPortfolioRepository.findAllByUserId(user.getId());
+            //2. User에 연관된 Portfolio 컬렉션 바로 참조
+            List<UserPortfolio> portfolios = user.getPortfolios();
+
             BigDecimal stockAssets = portfolios.stream()
                     .map(p -> {
                         BigDecimal currentPrice = stockPrices.getOrDefault(p.getTicker(), BigDecimal.ZERO);
@@ -116,6 +118,7 @@ public class RankingBatchConfiguration {
                     .reduce(BigDecimal.ZERO, BigDecimal::add);
 
             BigDecimal totalAssets = balance.add(stockAssets);
+
             double profitRate = totalAssets.subtract(INITIAL_CAPITAL)
                     .divide(INITIAL_CAPITAL, 4, RoundingMode.HALF_UP)
                     .multiply(new BigDecimal("100"))
@@ -128,6 +131,7 @@ public class RankingBatchConfiguration {
                     .build();
         };
     }
+
 
     @Bean
     public JpaItemWriter<Ranking> rankingItemWriter() {
